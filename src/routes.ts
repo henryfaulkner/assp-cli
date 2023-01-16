@@ -6,22 +6,6 @@ let querystring = require('querystring');
 let cookieParser = require('cookie-parser');
 require('dotenv').config();
 let helpers = require("./helpers");
-import {
-  collection,
-  addDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  deleteDoc,
-  doc
-} from "firebase/firestore";
-import { firestore, auth } from "./lib/firebase";
-import * as CollectionConstants from "./lib/CollectionConstants";
-import FirestoreUser from "./lib/FirestoreUser";
-import {
-  createUserWithEmailAndPassword
-} from "firebase/auth";
 
 import AggregatedTracksByArtist from "./models/AggregatedTracksByArtist";
 import Playlist from "./models/Playlist";
@@ -29,9 +13,8 @@ import Track from "./models/Track";
 import User from "./models/User";
 import Image from "./models/Image"
 
-const client_id: string = process.env.CLIENT_ID; // Your client id
-const client_secret: string = process.env.CLIENT_SECRET; // Your secret
-const redirect_uri: string = `${process.env.SERVER_ENV}/callback`; // Your redirect uri
+const redirect_uri: string = `${'localhost:8888'}/callback`; // Your redirect uri
+const client_env: string = 'localhost:5000'
 let stateKey = 'spotify_auth_state';
 let router = express_routes.Router();
 let aggregatedTracksByArtistList: AggregatedTracksByArtist[] = [];
@@ -73,7 +56,7 @@ router.get('/callback', async function(req, res) {
   let storedState = req.cookies ? req.cookies[stateKey] : null;
 
   if (state === null || state !== storedState) {
-    res.redirect(process.env.CLIENT_ENV + '/#' +
+    res.redirect(client_env + '/#' +
       querystring.stringify({
         error: 'state_mismatch'
       }));
@@ -85,7 +68,7 @@ router.get('/callback', async function(req, res) {
         method: "POST",
         headers: {
           Accept: 'application/json',
-          'Authorization': 'Basic ' + (new Buffer(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64')),
+          'Authorization': 'Basic ' + (new Buffer(client_id + ':' + client_secret).toString('base64')),
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         params: {
@@ -118,14 +101,14 @@ router.get('/callback', async function(req, res) {
       let user = userRes.data;
 
       // we can also pass the token to the browser to make requests from there
-      res.redirect(process.env.CLIENT_ENV + '/main.html#' +
+      res.redirect(client_env + '/main.html#' +
         querystring.stringify({
           access_token: access_token,
           refresh_token: refresh_token,
           spotify_user_id: user.id
         }));
     } else {
-      res.redirect(process.env.CLIENT_ENV + '/#' +
+      res.redirect(client_env + '/#' +
         querystring.stringify({
           error: 'invalid_token'
         }));
@@ -157,11 +140,11 @@ router.get('/refresh_token', function(req, res) {
 
 router.get('/logout', function(req, res) {
   res.clearCookie(stateKey);
-  res.redirect(process.env.CLIENT_ENV);
+  res.redirect(client_env);
 });
 
 router.get("/return-home", function(req, res) {
-  res.redirect(process.env.CLIENT_ENV);
+  res.redirect(client_env);
 });
 
 router.get("/get-liked-tracks", async function(req, res) {
@@ -272,7 +255,7 @@ router.get("/run-process", async function(req, res) {
   };
   console.log("Finished creating playlists!");
   aggregatedTracksByArtistList = [];
-  res.redirect(`${process.env.CLIENT_ENV}/successfulCreate.html#access_token=${req.query.access_token}&refresh_token=${req.query.refresh_token}&spotify_user_id=${req.query.spotify_user_id}`);
+  res.redirect(`${client_env}/successfulCreate.html#access_token=${req.query.access_token}&refresh_token=${req.query.refresh_token}&spotify_user_id=${req.query.spotify_user_id}`);
 })
 
 router.get("/unfollow-root-playlists", async function(req, res) {
@@ -360,113 +343,8 @@ router.get("/unfollow-root-playlists", async function(req, res) {
     console.log(hasFiveOTwo)
   }
   console.log("Finished deleting playlists.")
-  res.redirect(`${process.env.CLIENT_ENV}/successfulUnfollow.html#access_token=${req.query.access_token}&refresh_token=${req.query.refresh_token}&spotify_user_id=${req.query.spotify_user_id}`);
+  res.redirect(`${client_env}/successfulUnfollow.html#access_token=${req.query.access_token}&refresh_token=${req.query.refresh_token}&spotify_user_id=${req.query.spotify_user_id}`);
 });
-
-router.get('/subscribe', async function(req, res) {
-  const name: string = req.query.name;
-  const email: string = req.query.email;
-
-  try {
-    //const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const userObj = new FirestoreUser({
-      name: name,
-      Email: email,
-      refresh_token: req.query.refresh_token,
-      SpotifyUserID: req.query.spotify_user_id
-    });
-    console.log("userObj")
-    console.log(userObj)
-    await addDoc(
-      collection(firestore, CollectionConstants.Users),
-      JSON.parse(JSON.stringify(userObj))
-    ).then((res) => {
-      userObj.SetDocumentID = res.id;
-    });
-    console.log("Successfully created user");
-    res.redirect(process.env.CLIENT_ENV);
-  } catch (exception) {
-    console.log("Something went wrong.");
-    res.redirect(process.env.CLIENT_ENV);
-  }
-});
-
-router.get('/unsubscribe', async function(req, res) {
-  const collectionRef = collection(firestore, CollectionConstants.Users);
-  console.log(req.query.email)
-  const q = await query(
-      collectionRef,
-      where("Email", "==", req.query.email)
-  );
-  const docsRef = await getDocs(q);
-  const docRef = doc(collectionRef, docsRef.docs[0].id)
-  console.log("docRef")
-  console.log(docRef)
-  await deleteDoc(docRef);
-  res.redirect(process.env.CLIENT_ENV);
-})
-
-// call individually for every subscribed user
-// can't do all users in one call because of timeout
-// Scheduled Job url:
-// https://console.cloud.google.com/cloudscheduler?project=artists-saved-songs-playlists
-router.get('/update-subscribers', async function(req, res) {
-  const data = await getDocs(
-    collection(firestore, CollectionConstants.Users)
-  );
-  const users: FirestoreUser[] = [];
-  data.forEach((doc) => {
-    users.push(
-      new FirestoreUser({
-        name: doc.data().name,
-        Email: doc.data().Email,
-        refresh_token: doc.data().refresh_token,
-        AuthID: doc.data().AuthID,
-        SpotifyUserID: doc.data().SpotifyUserID,
-        DocumentID: doc.id,
-      })
-    );
-  });
-  console.log("users.length")
-  console.log(users.length)
-  for(let i = 0; i < users.length; i++) {
-    console.log(`${process.env.SERVER_ENV}/refresh_token?refresh_token=${users[i].refresh_token}`)
-    // Async refresh access token
-    const response = await axios.get(`${process.env.SERVER_ENV}/refresh_token?refresh_token=${users[i].refresh_token}`, 
-      {
-        'Content-Type': "application/json",
-        json: true
-      }
-    )
-    .catch(function(error) {
-      console.log("Failed to refresh token.")
-    })
-    const access_token: string = response.data.access_token;
-    
-    const params = {
-      access_token: access_token,
-      spotify_user_id: users[i].SpotifyUserID
-    };
-    // Wanted to be synchronous but
-    // Functions can only handle a single request at a time
-    // Multithreading may be necessary 
-    // Parallel Execution: https://www.youtube.com/watch?v=MzTS6mFDGjU&list=PLl-K7zZEsYLm9A9rcHb1IkyQUu6QwbjdM&index=3
-    axios(`${process.env.SERVER_ENV}/update-users-playlists?access_token=${params.access_token}&spotify_user_id=${params.spotify_user_id}`,
-      {
-        method: 'GET',
-        headers: { 
-          "Content-Type": 'application/json',
-          'Accept' : 'application/json'
-        }
-      }
-    )
-    .catch(function(error) {
-      console.log("Failed to update users' playlists.")
-    })
-  }
-
-  res.send({success: "success"})
-})
 
 router.get("/update-users-playlists", async (req, res) => {
   console.log("Run Cron Job")
