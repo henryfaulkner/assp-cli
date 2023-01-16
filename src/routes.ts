@@ -13,6 +13,8 @@ import Track from "./models/Track";
 import User from "./models/User";
 import Image from "./models/Image"
 
+const client_id: string = 'd2168f3d6a2a424a82fa9de1c3cfe45b'; // Your client id
+const client_secret: string = '8fc4aaceb03b406fb4f724113528d8b3'; // Your secret
 const redirect_uri: string = `${'localhost:8888'}/callback`; // Your redirect uri
 const client_env: string = 'localhost:5000'
 let stateKey = 'spotify_auth_state';

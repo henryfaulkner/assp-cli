@@ -109,3 +109,5 @@ build
 
 # Firebase cache
 .firebase/
+# CSS
+*.css
